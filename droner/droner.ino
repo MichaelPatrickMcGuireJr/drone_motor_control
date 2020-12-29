@@ -1,20 +1,23 @@
 #include <Wire.h>
 #include <Servo.h>
-
+#include <PID_v1.h>
 
 // globals
 // GY-91
 int address_MPU9250 = 0x68;         //MPU9250
+int16_t ax, ay, az;
+int16_t gx, gy, gz;
+int16_t mx, my, mz;
 
-
+// resistor pot & ESC
 int analogPin = A0;
 int val = 0;
-
-
 Servo ESC;
 int potValue;
-//int ADXLAddress = 0x68;  // MPU9250
-//int ADXLAddress = 0x76;  // MPU280
+
+// PID algorithm
+double Setpoint, Input, Output;
+PID myPID(&Input, &Output, &Setpoint,.001,0.0006,0.0002, REVERSE);
 
 
 // the setup function runs once when you press reset or power the board
@@ -36,13 +39,16 @@ void setup() {
   Wire.write(0b00000101);
   Wire.endTransmission();
 
-
-
-
-
+  // initialize PID
+  Setpoint = 0;
+  Input = 0;
+  myPID.SetMode(AUTOMATIC);
+  myPID.SetSampleTime(50);
+  myPID.SetOutputLimits(0, 180);
+    
   // initialize ESC module
   ESC.attach(9,1000,2000); // (pin, min pulse width, max pulse width in microseconds)
-
+  ESC.write(0);
 }
 
 // the loop function runs over and over again forever
@@ -50,16 +56,10 @@ void loop() {
 
   // reading the gyroscope
   Wire.beginTransmission(address_MPU9250);
-  //error = Wire.endTransmission();
   if(Wire.endTransmission() == 0)
   {
 
-//#define MPU6050_RA_GYRO_XOUT_H      0x43
-//#define MPU6050_RA_GYRO_XOUT_L      0x44
 
-int16_t ax, ay, az;
-int16_t gx, gy, gz;
-int16_t mx, my, mz;
 
     
     Wire.beginTransmission(address_MPU9250);    // access GY-91
@@ -71,7 +71,6 @@ int16_t mx, my, mz;
     gy = Wire.read()<<8|Wire.read();
     gz = Wire.read()<<8|Wire.read();
 
-
     Wire.beginTransmission(address_MPU9250);    // access GY-91
     Wire.write(0x3B);                           // starting register of gyroscope
     Wire.endTransmission();
@@ -80,10 +79,6 @@ int16_t mx, my, mz;
     ax = Wire.read()<<8|Wire.read();
     ay = Wire.read()<<8|Wire.read();
     az = Wire.read()<<8|Wire.read();
-
-
-    //float deg = sin(ay);
-
     
     //Serial.print( "GYRO XOUT = " );
     //Serial.print( gx );
@@ -102,20 +97,34 @@ int16_t mx, my, mz;
     //Serial.print( " + " );
     //Serial.print( az );
     Serial.print( "\n" );
+
+
+
+
+
     
   }
 
 delay(50);
 
+  Input = ay;
+  myPID.Compute();
+  Serial.print( "output = " );
+  Serial.print( Output );
+  Serial.print( "\n" );
+
+ESC.write( Output );
 
 
   // reading the resistor pot and writing the XPS
   //delay(250);                       // wait for a second
   val = analogRead(analogPin);
-  potValue = map(val, 0, 1023, 0, 180);   // scale it to use it with the servo library (value between 0 and 180)
-  ESC.write(potValue);    // Send the signal to the ESC
-  //Serial.println( val );
-
+  if(val > 15)
+  {
+    potValue = map(val, 0, 1023, 0, 180);   // scale it to use it with the servo library (value between 0 and 180)
+    ESC.write(potValue);    // Send the signal to the ESC
+    //Serial.println( val );
+  }
 
 
 }
